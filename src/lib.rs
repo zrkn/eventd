@@ -20,96 +20,102 @@ impl fmt::Display for SubscriptionMissing {
 impl std::error::Error for SubscriptionMissing {}
 
 
-pub struct Event<T> {
-    handlers: Slab<Box<Fn(T) + Send + Sync>>,
+macro_rules! event_impl {
+    ($name:ident => $fn:tt, [$($bound:tt),*], $self:ident: $self_ty:ty, $iter_ex:expr) => {
+        pub struct $name<'a, T> {
+            handlers: Slab<Box<$fn(T) $( + $bound)* + 'a>>,
+        }
+
+        impl<'a, T> Default for $name<'a, T> {
+            fn default() -> Self {
+                $name {
+                    handlers: Slab::new(),
+                }
+            }
+        }
+
+        impl<'a, T> $name<'a, T>
+        where
+            T: Clone,
+        {
+            pub fn new() -> Self {
+                $name::default()
+            }
+
+            pub fn subscribe<F>(&mut self, handler: F) -> Subscription
+            where
+                F: $fn(T) $( + $bound)* + 'a,
+            {
+                Subscription {
+                    key: self.handlers.insert(Box::new(handler)),
+                }
+            }
+
+            pub fn unsubscribe(
+                &mut self,
+                subscription: Subscription,
+            ) -> Result<(), SubscriptionMissing> {
+                if self.handlers.contains(subscription.key) {
+                    self.handlers.remove(subscription.key);
+                    Ok(())
+                } else {
+                    Err(SubscriptionMissing)
+                }
+            }
+
+            pub fn emit($self:$self_ty, args: T) {
+                for (_, handler) in $iter_ex {
+                    (*handler)(args.clone())
+                }
+            }
+        }
+    };
 }
 
-impl<T> Default for Event<T> {
-    fn default() -> Self {
-        Event {
-            handlers: Slab::new(),
-        }
-    }
-}
+event_impl!(Event => Fn, [], self: &Self, &self.handlers);
+event_impl!(SyncEvent => Fn, [Send, Sync], self: &Self, &self.handlers);
+event_impl!(MutEvent => FnMut, [], self: &mut Self, &mut self.handlers);
 
-impl<T> Event<T>
-where
-    T: Clone,
-{
-    pub fn new() -> Self {
-        Event::default()
-    }
+pub type StaticEvent<T> = Event<'static, T>;
+pub type StaticSyncEvent<T> = SyncEvent<'static, T>;
+pub type StaticMutEvent<T> = MutEvent<'static, T>;
 
-    pub fn subscribe<F>(&mut self, handler: F) -> Subscription
-    where
-        F: Fn(T) + Send + Sync + 'static,
-    {
-        Subscription {
-            key: self.handlers.insert(Box::new(handler)),
-        }
-    }
-
-    pub fn unsubscribe(
-        &mut self,
-        subscription: Subscription,
-    ) -> Result<(), SubscriptionMissing> {
-        if self.handlers.contains(subscription.key) {
-            self.handlers.remove(subscription.key);
-            Ok(())
-        } else {
-            Err(SubscriptionMissing)
-        }
-    }
-
-    pub fn emit(&self, args: T) {
-        for (_, handler) in &self.handlers {
-            (*handler)(args.clone())
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use std::sync::{Arc, Mutex};
-
     #[test]
     fn test_event() {
-        let called1 = Arc::new(Mutex::new(false));
-        let called2 = Arc::new(Mutex::new(false));
-        let some_buffer = Arc::new(Mutex::new(Vec::new()));
-
+        let mut called1 = false;
+        let mut called2 = false;
+        let mut some_buffer = Vec::new();
         {
-            let mut my_event = Event::<u8>::new();
-            let called1 = called1.clone();
-            my_event.subscribe(move |x| {
-                *called1.lock().unwrap() = true;
+            let mut my_event = MutEvent::<u8>::new();
+            my_event.subscribe(|x| {
+                called1 = true;
                 assert_eq!(x, 42);
             });
-            let called2 = called2.clone();
-            let some_buffer = some_buffer.clone();
-            my_event.subscribe(move |x| {
-                *called2.lock().unwrap() = true;
-                some_buffer.lock().unwrap().push(x);
+            my_event.subscribe(|x| {
+                called2 = true;
+                some_buffer.push(x);
             });
 
             my_event.emit(42);
         }
 
-        assert!(*called1.lock().unwrap());
-        assert!(*called2.lock().unwrap());
-        assert_eq!(*some_buffer.lock().unwrap(), vec![42]);
+        assert!(called1);
+        assert!(called2);
+        assert_eq!(some_buffer, vec![42]);
     }
 
     #[test]
     fn test_unsubscribe() {
-        let called = Arc::new(Mutex::new(0u8));
+        let mut called = 0u8;
         {
-            let mut my_event = Event::<()>::new();
-            let called = called.clone();
-            let subscription = my_event.subscribe(move |_| {
-                *called.lock().unwrap() += 1;
+            let mut my_event = MutEvent::<()>::new();
+            let subscription = my_event.subscribe(|_| {
+                called += 1;
             });
             my_event.emit(());
             my_event.emit(());
@@ -117,6 +123,6 @@ mod tests {
             my_event.emit(());
             my_event.emit(());
         }
-        assert_eq!(*called.lock().unwrap(), 2);
+        assert_eq!(called, 2);
     }
 }

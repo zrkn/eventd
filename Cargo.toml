@@ -1,11 +1,11 @@
 [package]
 name = "eventd"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["zrkn <zrkn@email.su>"]
 edition = "2018"
 description = "Simple observer-like event dispatcher"
 repository = "https://github.com/zrkn/eventd/"
-keywords = ["event", "delegate"]
+keywords = ["event", "delegate", "observer"]
 license = "MIT"
 
 [dependencies]
