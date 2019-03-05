@@ -1,5 +1,6 @@
 use std::fmt;
 
+#[doc(hidden)]
 pub use slab::Slab;
 
 
@@ -58,7 +59,7 @@ macro_rules! event_impl {
         impl$(<$lt>)? Default for $name$(<$lt>)? {
             fn default() -> Self {
                 $name {
-                    handlers: Slab::new(),
+                    handlers: $crate::Slab::new(),
                 }
             }
         }
@@ -82,7 +83,7 @@ macro_rules! event_impl {
                     self.handlers.remove(subscription.key);
                     Ok(())
                 } else {
-                    Err(SubscriptionMissing)
+                    Err($crate::SubscriptionMissing)
                 }
             }
 
@@ -93,6 +94,10 @@ macro_rules! event_impl {
             }
         }
     };
+}
+
+pub mod example {
+    event!(ExampleEvent<'a> => Fn(x: u32, y: &str) + Sync + 'a);
 }
 
 #[cfg(test)]
