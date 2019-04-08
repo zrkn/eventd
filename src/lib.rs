@@ -4,12 +4,16 @@ use std::fmt;
 pub use slab::Slab;
 
 
+/// Token used to differentiate subscribers.
+///
+/// Should be passed back to event dispatcher to unsubscribe.
 pub struct Subscription {
     #[doc(hidden)]
     pub key: usize,
 }
 
 
+/// Error emmited on attempt to unsubscribe with invalid subscription.
 #[derive(Debug)]
 pub struct SubscriptionMissing;
 
@@ -22,36 +26,67 @@ impl fmt::Display for SubscriptionMissing {
 impl std::error::Error for SubscriptionMissing {}
 
 
+/// Macro used for defining event dispatcher types.
+///
+/// See crate documentation for usage.
 #[macro_export(local_inner_macros)]
 macro_rules! event {
     (
+        $(#[$attr:meta])*
         $name:ident
         $(< $lt:lifetime >)? => Fn($($arg_name:ident : $arg_ty:ty),*)
         $(+ $bound:tt)*
     ) => {
-        event_impl!($name$(< $lt >)? => Fn, [$($arg_name: $arg_ty),*], [$($bound),*], self: &Self, &self.handlers);
+        __event_impl!(
+            $(#[$attr])*,
+            $name$(< $lt >)? => Fn,
+            [$($arg_name: $arg_ty),*],
+            [$($bound),*],
+            self: &Self, &self.handlers
+        );
     };
     (
+        $(#[$attr:meta])*
         $name:ident
         $(< $lt:lifetime >)? => FnMut($($arg_name:ident : $arg_ty:ty),*)
         $(+ $bound:tt)*
     ) => {
-        event_impl!($name$(< $lt >)? => FnMut, [$($arg_name: $arg_ty),*], [$($bound),*], self: &mut Self, &mut self.handlers);
+        __event_impl!(
+            $(#[$attr])*,
+            $name$(< $lt >)? => FnMut,
+            [$($arg_name: $arg_ty),*],
+            [$($bound),*],
+            self: &mut Self, &mut self.handlers
+        );
     };
     (
+        $(#[$attr:meta])*
         $name:ident
         $(< $lt:lifetime >)? => FnOnce($($arg_name:ident : $arg_ty:ty),*)
         $(+ $bound:tt)*
     ) => {
-        event_impl!($name$(< $lt >)? => FnOnce, [$($arg_name: $arg_ty),*], [$($bound),*], self: Self, self.handlers);
+        __event_impl!(
+            $(#[$attr])*,
+            $name$(< $lt >)? => FnOnce,
+            [$($arg_name: $arg_ty),*],
+            [$($bound),*],
+            self: Self, self.handlers
+        );
     };
 }
 
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! event_impl {
-    ($name:ident $(< $lt:lifetime >)? => $fn:tt, [$($arg_name:ident: $arg_ty:ty),*], [$($bound:tt),*], $self:ident: $self_ty:ty, $iter_ex:expr) => {
+macro_rules! __event_impl {
+    (
+        $(#[$attr:meta])*,
+        $name:ident $(< $lt:lifetime >)? => $fn:tt,
+        [$($arg_name:ident: $arg_ty:ty),*],
+        [$($bound:tt),*],
+        $self:ident: $self_ty:ty, $iter_ex:expr
+    ) => {
+        $(#[$attr])*
         pub struct $name$(<$lt>)? {
             handlers: $crate::Slab<Box<$fn($($arg_ty),*) $( + $bound)*>>,
         }
@@ -66,6 +101,9 @@ macro_rules! event_impl {
 
         #[allow(dead_code)]
         impl$(<$lt>)? $name$(<$lt>)?  {
+            /// Subscribes a closure to be called on event emmision.
+            ///
+            /// Return subscription token.
             pub fn subscribe<F>(&mut self, handler: F) -> $crate::Subscription
             where
                 F: $fn($($arg_ty),*) $( + $bound)*,
@@ -75,6 +113,9 @@ macro_rules! event_impl {
                 }
             }
 
+            /// Unsubscribes handler for given subscription token.
+            ///
+            /// Returns error if there is no handler for given subscription.
             pub fn unsubscribe(
                 &mut self,
                 subscription: $crate::Subscription,
@@ -87,6 +128,9 @@ macro_rules! event_impl {
                 }
             }
 
+            /// Dispatches a call with given arguments to all subscribed handlers.
+            ///
+            /// Arguments must be clonable.
             pub fn emit($self:$self_ty, $($arg_name: $arg_ty),*) {
                 for (_, handler) in $iter_ex {
                     (*handler)($($arg_name.clone()),*)
@@ -97,7 +141,10 @@ macro_rules! event_impl {
 }
 
 pub mod example {
-    event!(ExampleEvent<'a> => Fn(x: u32, y: &str) + Sync + 'a);
+    event!(
+        /// Sample event generated using `event!` macro.
+        ExampleEvent<'a> => Fn(x: u32, y: &str) + Sync + 'a
+    );
 }
 
 #[cfg(test)]
