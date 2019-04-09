@@ -1,3 +1,51 @@
+//! This crate provides implementation of [observer](https://en.wikipedia.org/wiki/Observer_pattern) design pattern.
+//!
+//! Events are strongly typed, with immediate dispatch and support subscription and unsubscription
+//! of multiple handlers.
+//!
+//! Events are defined using `event!` macro. It allows user to fully control lifetime, mutability
+//! and thread safety constraints for event handlers.
+//!
+//! # Syntax
+//!
+//! ```ignore
+//! event!(
+//!     /// Optional doc comments
+//!     EventName[<'lifetime>] => [Fn|FnMut]([arg_name: ArgType, ...]) [+ Send + Sync + 'lifetime]
+//! );
+//! ```
+//!
+//! Event arguments must be `Clone`able types.
+//!
+//! # Examples
+//!
+//! ```
+//! use eventd::event;
+//!
+//! // Event handlers are static immutable and not thread-safe
+//! event!(Event1 => Fn(x: u32) + 'static);
+//!
+//! // Event handlers are with lifetime `'a` mutable and not thread-safe
+//! event!(Event2<'a> => FnMut(y: u32) + 'a);
+//!
+//! // Event handlers are static, thread-safe and immutable
+//! event!(Event3 => Fn(z: u32) + Send + Sync + 'static);
+//! ```
+//!
+//! # Example usage
+//!
+//! ```rust
+//! #[macro_use]
+//! extern crate eventd;
+//!
+//! event!(MyEvent => Fn(x: u8) + 'static);
+//!
+//! fn main() {
+//!     let mut my_event = MyEvent::default();
+//!     let _ = my_event.subscribe(|x| println!("Got {}", x));
+//!     my_event.emit(42);
+//! }
+//! ```
 use std::fmt;
 
 #[doc(hidden)]
@@ -57,20 +105,6 @@ macro_rules! event {
             [$($arg_name: $arg_ty),*],
             [$($bound),*],
             self: &mut Self, &mut self.handlers
-        );
-    };
-    (
-        $(#[$attr:meta])*
-        $name:ident
-        $(< $lt:lifetime >)? => FnOnce($($arg_name:ident : $arg_ty:ty),*)
-        $(+ $bound:tt)*
-    ) => {
-        __event_impl!(
-            $(#[$attr])*,
-            $name$(< $lt >)? => FnOnce,
-            [$($arg_name: $arg_ty),*],
-            [$($bound),*],
-            self: Self, self.handlers
         );
     };
 }
@@ -141,6 +175,18 @@ macro_rules! __event_impl {
 }
 
 pub mod example {
+    //! Module with sample event.
+    //!
+    //! Generated using:
+    //!
+    //! ```
+    //! use eventd::event;
+    //!
+    //! event!(
+    //!     /// Sample event generated using `event!` macro.
+    //!     ExampleEvent<'a> => Fn(x: u32, y: &str) + Sync + 'a
+    //! );
+    //! ```
     event!(
         /// Sample event generated using `event!` macro.
         ExampleEvent<'a> => Fn(x: u32, y: &str) + Sync + 'a

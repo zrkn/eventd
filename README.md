@@ -32,11 +32,11 @@ Next, you can use `event!` macro to define your event signatures and use them:
 #[macro_use]
 extern crate eventd;
 
-event!(MyEvent => Fn(x: u8));
+event!(MyEvent => Fn(x: u8) + 'static);
 
 fn main() {
     let mut my_event = MyEvent::default();
-    my_event.subscribe(|x| println!("Got {}", x));
+    let _ = my_event.subscribe(|x| println!("Got {}", x));
     my_event.emit(42);
 }
 ```
