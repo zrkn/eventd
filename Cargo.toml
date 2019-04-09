@@ -1,6 +1,6 @@
 [package]
 name = "eventd"
-version = "0.3.1"
+version = "0.3.2"
 authors = ["zrkn <zrkn@email.su>"]
 edition = "2018"
 description = "Simple observer-like event dispatcher"
